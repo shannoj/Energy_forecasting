@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression
 import numpy as np
 
 df = pd.read_excel('ice_electric-2025.xlsx', header=2)
@@ -72,24 +73,53 @@ for hub_name, df in loc_df.items():
     
     print("\n")
 
-for hub_name, df in montly_avg_loc.items():
+print(montly_avg_loc.items())
+
+# Create figure with subplots before the loop
+num_hubs = len(montly_avg_loc)
+print(num_hubs)
+fig, axes = plt.subplots(num_hubs, 1, figsize=(10, 20))
+
+# If only one hub, axes won't be an array
+if num_hubs == 1:
+    axes = [axes]
+
+for idx, (hub_name, df) in enumerate(montly_avg_loc.items()):
 
     avg_year = df['mean'].mean()
 
     if avg_year > most_expensive:
        most_expensive = avg_year
        most_expensive_hub = hub_name
-    
+
     if avg_year < least_expensive:
         least_expensive = avg_year
         least_expensive_hub = hub_name
 
+    df['Time'] = np.arange(len(df.index))
 
-print(f'Most Expensive on Avg: {most_expensive_hub}, at {round(most_expensive, 2)}$ per month')
+    X = df.loc[:, ['Time']]
+    y= df.loc[:, 'mean']
 
-print(f"Least Expensive on Avg: {least_expensive_hub}, at {round(least_expensive, 2)}$ per month")
+    model = LinearRegression()
 
+    model.fit(X, y)
 
+    y_pred = pd.Series(model.predict(X), index=X.index)
+
+    # Use the subplot axis instead of creating new figure
+    ax = axes[idx]
+    ax.plot(X, y, label='Actual')
+    ax.plot(X, y_pred, label='Trend', linestyle='--')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Wtd avg price $/MWh')
+    ax.set_title(f'Time Series of {hub_name} monthly Wtd avg price $/MWh')
+    ax.grid(True)
+    ax.legend()
+
+# Adjust spacing and show once after loop
+plt.tight_layout()
+plt.show()
 
 
 
