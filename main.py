@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 import numpy as np
+from statsmodels.tsa.deterministic import DeterministicProcess
 
 df = pd.read_excel('ice_electric-2025.xlsx', header=2)
 
@@ -42,6 +43,7 @@ for hub_name, df in loc_df.items():
 
     loc_df[hub_name] = df
 
+
 # Second loop: Print analysis for each hub
 for hub_name, df in loc_df.items():
     print("=" * 60)
@@ -73,53 +75,85 @@ for hub_name, df in loc_df.items():
     
     print("\n")
 
-print(montly_avg_loc.items())
+# # Create figure with subplots before the loop
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import numpy as np
+from statsmodels.tsa.deterministic import DeterministicProcess
 
-# Create figure with subplots before the loop
+# [Your data loading code stays the same...]
+
+# Create figure with subplots
 num_hubs = len(montly_avg_loc)
-print(num_hubs)
-fig, axes = plt.subplots(num_hubs, 1, figsize=(10, 20))
+fig, axes = plt.subplots(num_hubs, 1, figsize=(12, 6*num_hubs))
 
-# If only one hub, axes won't be an array
 if num_hubs == 1:
     axes = [axes]
 
 for idx, (hub_name, df) in enumerate(montly_avg_loc.items()):
-
+    
+    # Calculate average for most/least expensive tracking
     avg_year = df['mean'].mean()
-
+    
     if avg_year > most_expensive:
        most_expensive = avg_year
        most_expensive_hub = hub_name
-
+    
     if avg_year < least_expensive:
         least_expensive = avg_year
         least_expensive_hub = hub_name
+    
+    # Reset index and create time variable
+    df = df.reset_index()
+    
+    # Use DeterministicProcess for polynomial trend
+    dp = DeterministicProcess(
+        index=df.index,
+        order=1 
+    )
+    
+    X = dp.in_sample()
 
-    df['Time'] = np.arange(len(df.index))
-
-    X = df.loc[:, ['Time']]
-    y= df.loc[:, 'mean']
-
+    X_fore = dp.out_of_sample(steps=3)
+    
+    y = df['mean']
+    
+    # Fit model
     model = LinearRegression()
-
     model.fit(X, y)
-
+    
+    # Predictions
     y_pred = pd.Series(model.predict(X), index=X.index)
-
-    # Use the subplot axis instead of creating new figure
+    y_fore = pd.Series(model.predict(X_fore), index=X_fore.index)
+    
+    # Plot
     ax = axes[idx]
-    ax.plot(X, y, label='Actual')
-    ax.plot(X, y_pred, label='Trend', linestyle='--')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Wtd avg price $/MWh')
-    ax.set_title(f'Time Series of {hub_name} monthly Wtd avg price $/MWh')
-    ax.grid(True)
-    ax.legend()
+    
+    # Actual data
+    ax.plot(df.index, y, 'o-', label='Actual', color='blue', linewidth=2)
+    
+    # Polynomial fit
+    ax.plot(df.index, y_pred, '--', label='Polynomial Trend', 
+            color='green', linewidth=2, alpha=0.7)
+    
+    # Forecast
+    forecast_index = np.arange(len(df), len(df) + len(y_fore))
+    ax.plot(forecast_index, y_fore, ':', label='Forecast', 
+            color='red', linewidth=2, marker='s')
+    
+    # Formatting
+    ax.set_xlabel('Month Index', fontsize=11)
+    ax.set_ylabel('Avg Price ($/MWh)', fontsize=11)
+    ax.set_title(f'{hub_name} - Monthly Average Price Forecast', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10)
+    
+    # Add vertical line to separate historical from forecast
+    ax.axvline(x=len(df)-0.5, color='gray', linestyle='--', alpha=0.5)
 
-# Adjust spacing and show once after loop
 plt.tight_layout()
+plt.savefig('hub_forecasts.png', dpi=300, bbox_inches='tight')
 plt.show()
-
 
 
