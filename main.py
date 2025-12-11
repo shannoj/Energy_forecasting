@@ -9,40 +9,87 @@ df.columns = df.columns.str.replace('\n', ' ').str.strip()
 
 columns = df.columns.to_list()
 
-df['Trade date'] = pd.to_datetime(df['Trade date'], errors='coerce')
-df['Delivery start date'] = pd.to_datetime(df['Delivery start date'], errors='coerce')
+df['Trade date'] = pd.to_datetime(df['Trade date'], format='%m/%d/%y', errors='coerce')
+df['Delivery start date'] = pd.to_datetime(df['Delivery start date'],format='%m/%d/%y', errors='coerce')
+
+hubs = df['Price hub'].unique()
 
 df_midc = df[df['Price hub'].str.contains('Mid C', case=False, na=False)].copy()
 
-# Sort by date
-df_midc = df_midc.sort_values('Trade date')
+loc_df = {}
+montly_avg_loc = {}
 
-# Create time-based features
-df_midc['Year'] = df_midc['Trade date'].dt.year
-df_midc['Month'] = df_midc['Trade date'].dt.month
-df_midc['Day'] = df_midc['Trade date'].dt.day
-df_midc['DayOfWeek'] = df_midc['Trade date'].dt.dayofweek
-df_midc['Week'] = df_midc['Trade date'].dt.isocalendar().week
+most_expensive = 0
+least_expensive = 1000000000
 
-# Date gaps
-print("Date gaps analysis:")
-df_midc['Date_diff'] = df_midc['Trade date'].diff()
-print(df_midc[df_midc['Date_diff'] > pd.Timedelta(days=1)][['Trade date', 'Date_diff']].head(10))
+most_expensive_hub = ''
 
-# Monthly stats
-print("\nAverage price by month:")
-monthly_avg = df_midc.groupby('Month')['Wtd avg price $/MWh'].agg(['mean', 'std', 'min', 'max'])
-print(monthly_avg)
+least_expensive_hub = ''
 
-# Spikes
-print("\nPrice spikes (> $100/MWh):")
-spikes = df_midc[df_midc['Wtd avg price $/MWh'] > 100]
-print(spikes[['Trade date', 'Wtd avg price $/MWh', 'Daily volume MWh']])
+for loc in hubs:
+    loc_df[loc] = df[df['Price hub'].str.contains(loc, case=False, na=False)].copy()
 
-# Split data: use data up to Sept 2025 for training, rest for testing
-train_cutoff = pd.Timestamp('2025-09-01')
-train = df_midc[df_midc['Trade date'] < train_cutoff].copy()
-test = df_midc[df_midc['Trade date'] >= train_cutoff].copy()
+for hub_name, df in loc_df.items():
+
+    df = df.sort_values('Trade date').copy()
+    # Create time-based features
+    df['Year'] = df['Trade date'].dt.year
+    df['Month'] = df['Trade date'].dt.month
+    df['Day'] = df['Trade date'].dt.day
+    df['DayOfWeek'] = df['Trade date'].dt.dayofweek
+    df['Week'] = df['Trade date'].dt.isocalendar().week
+
+    loc_df[hub_name] = df
+
+# Second loop: Print analysis for each hub
+for hub_name, df in loc_df.items():
+    print("=" * 60)
+    print(f"ANALYSIS FOR: {hub_name}")
+    print("=" * 60)
+    
+    # Date gaps
+    print("\nDate gaps analysis:")
+    df['Date_diff'] = df['Trade date'].diff()
+    gaps = df[df['Date_diff'] > pd.Timedelta(days=1)][['Trade date', 'Date_diff']]
+    if len(gaps) > 0:
+        print(gaps.head(10))
+    else:
+        print("No significant date gaps")
+
+    # Monthly stats
+    print("\nAverage price by month:")
+    monthly_avg = df.groupby('Month')['Wtd avg price $/MWh'].agg(['mean', 'std', 'min', 'max'])
+    montly_avg_loc[hub_name] = monthly_avg.copy()
+    print(monthly_avg)
+
+    # Spikes
+    print("\nPrice spikes (> $100/MWh):")
+    spikes = df[df['Wtd avg price $/MWh'] > 100]
+    if len(spikes) > 0:
+        print(spikes[['Trade date', 'Wtd avg price $/MWh', 'Daily volume MWh']])
+    else:
+        print("No price spikes > $100/MWh")
+    
+    print("\n")
+
+for hub_name, df in montly_avg_loc.items():
+
+    avg_year = df['mean'].mean()
+
+    if avg_year > most_expensive:
+       most_expensive = avg_year
+       most_expensive_hub = hub_name
+    
+    if avg_year < least_expensive:
+        least_expensive = avg_year
+        least_expensive_hub = hub_name
+
+
+print(f'Most Expensive on Avg: {most_expensive_hub}, at {round(most_expensive, 2)}$ per month')
+
+print(f"Least Expensive on Avg: {least_expensive_hub}, at {round(least_expensive, 2)}$ per month")
+
+
 
 
 
