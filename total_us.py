@@ -29,7 +29,7 @@ def plot_forecast_and_pred(y, y_pred, y_fore):
 def plot_lag_forecast_and_pred(y, y_pred, y_fore):
 
     plt.figure(figsize=(14, 6))
-    plt.plot(total.index, total, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
+    plt.plot(y.index, total, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
     plt.plot(y_pred.index, y_pred, label='Train Fitted',
             color='orange', linestyle='--', linewidth=2)
     plt.plot(y_fore.index, y_fore, label='Test Forecast',
@@ -42,6 +42,33 @@ def plot_lag_forecast_and_pred(y, y_pred, y_fore):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+def plot_rolling_stats(mean, median, std, time, emw = False):
+        
+    if emw:
+        plt.figure(figsize=(14, 6))
+        plt.title(f"{time} Month Exponential Moving Window Statistics")
+        plt.plot(mean.index, mean, label = "Mean")
+        plt.plot(mean.index, std, color = 'green', label = "Standard Deviation")
+        plt.xlabel("Time (Months)")
+        plt.ylabel('Total Generation (thousand MWh)')
+        plt.legend(fontsize=11)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    else:
+        plt.figure(figsize=(14, 6))
+        plt.title(f"{time} Month Rolling Statistics")
+        plt.plot(mean.index, mean, label = "Mean")
+        plt.plot(mean.index, median, color= 'blue', label = "Median")
+        plt.plot(mean.index, std, color = 'green', label = "Standard Deviation")
+        plt.xlabel("Time (Months)")
+        plt.ylabel('Total Generation (thousand MWh)')
+        plt.legend(fontsize=11)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.show()
 
 def make_lags(ts, lags):
     return pd.concat(
@@ -102,6 +129,18 @@ X_lag = X_lag.fillna(0.0)
 # Create target series and data splits
 total_lag = total.copy()
 
+mean_12 = total_lag.rolling(12).mean()
+median_12 = total_lag.rolling(12).median()
+std_12 = total_lag.rolling(12).std()
+
+mean_6 = total_lag.rolling(6).mean()
+median_6 = total_lag.rolling(6).median()
+std_6 = total_lag.rolling(6).std()
+
+mean_3 = total_lag.ewm(3).mean()
+median_3 = total_lag.rolling(3).median()
+std_3 = total_lag.ewm(3).std()
+
 X_train, X_test, y_train, y_test = train_test_split(X_lag, total_lag, test_size=60, shuffle=False)
 
 # Fit and predict
@@ -109,5 +148,3 @@ model = LinearRegression()  # `fit_intercept=True` since we didn't use Determini
 model.fit(X_train, y_train)
 y_pred = pd.Series(model.predict(X_train), index=y_train.index)
 y_fore = pd.Series(model.predict(X_test), index=y_test.index)
-
-plot_lag_forecast_and_pred(total, y_pred, y_fore)
