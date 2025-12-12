@@ -75,15 +75,6 @@ for hub_name, df in loc_df.items():
     
     print("\n")
 
-# # Create figure with subplots before the loop
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-import numpy as np
-from statsmodels.tsa.deterministic import DeterministicProcess
-
-# [Your data loading code stays the same...]
-
 # Create figure with subplots
 num_hubs = len(montly_avg_loc)
 fig, axes = plt.subplots(num_hubs, 1, figsize=(12, 6*num_hubs))
