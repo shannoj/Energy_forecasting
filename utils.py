@@ -41,7 +41,6 @@ def seasonal_plot(X, y, period, freq, ax=None):
 def plot_periodogram_monthly(ts, detrend='linear', ax=None):
     from scipy.signal import periodogram
     
-    # For monthly data: 12 samples per year
     fs = 12  # 12 months per year
     
     frequencies, spectrum = periodogram(
@@ -53,12 +52,12 @@ def plot_periodogram_monthly(ts, detrend='linear', ax=None):
     )
     
     if ax is None:
-        _, ax = plt.subplots()
+        fig, ax = plt.subplots()  # Create new figure
+    else:
+        fig = ax.get_figure()  # Get existing figure
     
     ax.step(frequencies, spectrum, color="purple")
     ax.set_xscale("log")
-    
-    # Correct ticks for monthly data
     ax.set_xticks([1, 2, 3, 4, 6, 12])
     ax.set_xticklabels(
         [
@@ -74,7 +73,10 @@ def plot_periodogram_monthly(ts, detrend='linear', ax=None):
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.set_ylabel("Variance")
     ax.set_title("Periodogram (Monthly Data)")
-    return ax
+    fig.tight_layout()
+    
+    # DON'T call plt.show() here
+    return fig  # Return the figure
 
 
 # From Lesson 4

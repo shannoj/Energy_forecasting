@@ -7,68 +7,72 @@ import numpy as np
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 from statsmodels.graphics.tsaplots import plot_pacf
 from utils import seasonal_plot, plot_periodogram_monthly, plot_lags, lagplot
+import streamlit as st
+
+st.sidebar.title('Navigation')
+
+options = st.sidebar.radio('Pages', options=['Home', 'Statistics', 'Seasonal & Fourier Forecast', 'Lag Model'])
 
 def plot_forecast_and_pred(y, y_pred, y_fore):
-
-    x = pd.concat([y.iloc[[-1]], y_fore])
-
-    plt.figure(figsize=(14, 6))
-    plt.plot(y.index, y, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
-    plt.plot(y.index, y_pred, label='Fitted (Trend + Seasonal + Fourier)',
+    """Plot Fourier model forecast"""
+    fig, ax = plt.subplots(figsize=(14, 6))
+    x = pd.concat([y_pred.iloc[[-1]], y_fore])
+    
+    ax.plot(y.index, y, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
+    ax.plot(y_pred.index, y_pred, label='Fitted (Trend + Seasonal + Fourier)',
             color='orange', linestyle='--', linewidth=2)
-    plt.plot(x.index, x, label='Forecast (12 months)',
+    ax.plot(x.index, x, label='Forecast (12 months)',
             color='green', linestyle='--', linewidth=2)
-    plt.xlabel('Date', fontsize=12)
-    plt.ylabel('Total Generation (thousand MWh)', fontsize=12)
-    plt.title('US Electricity Generation - Time Series Decomposition', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=11)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.show()
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylabel('Total Generation (thousand MWh)', fontsize=12)
+    ax.set_title('US Electricity Generation - Time Series Decomposition', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig
 
-def plot_lag_forecast_and_pred(y, y_pred, y_fore):
-
-    plt.figure(figsize=(14, 6))
-    plt.plot(y.index, total, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
-    plt.plot(y_pred.index, y_pred, label='Train Fitted',
+def plot_lag_forecast_and_pred(y, y_pred, y_fore, y_test_start):
+    """Plot lag model with train/test split"""
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    ax.plot(y.index, y, label='Actual', color='blue', alpha=0.7, linewidth=1.5)
+    ax.plot(y_pred.index, y_pred, label='Train Fitted',
             color='orange', linestyle='--', linewidth=2)
-    plt.plot(y_fore.index, y_fore, label='Test Forecast',
+    ax.plot(y_fore.index, y_fore, label='Test Forecast',
             color='green', linestyle='--', linewidth=2)
-    plt.axvline(x=y_test.index[0], color='red', linestyle=':', linewidth=2, label='Train/Test Split')
-    plt.xlabel('Date', fontsize=12)
-    plt.ylabel('Total Generation (thousand MWh)', fontsize=12)
-    plt.title('US Electricity Generation - Lag Model (Train/Test Split)', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=11)
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.show()
+    ax.axvline(x=y_test_start, color='red', linestyle=':', linewidth=2, label='Train/Test Split')
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylabel('Total Generation (thousand MWh)', fontsize=12)
+    ax.set_title('US Electricity Generation - Lag Model (Train/Test Split)', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig
 
 def plot_rolling_stats(mean, median, std, time, emw = False):
-        
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+
     if emw:
-        plt.figure(figsize=(14, 6))
-        plt.title(f"{time} Month Exponential Moving Window Statistics")
-        plt.plot(mean.index, mean, label = "Mean")
-        plt.plot(mean.index, std, color = 'green', label = "Standard Deviation")
-        plt.xlabel("Time (Months)")
-        plt.ylabel('Total Generation (thousand MWh)')
-        plt.legend(fontsize=11)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
+        ax.set_title(f"{time} Month Exponential Moving Window Statistics")
+        ax.plot(mean.index, mean, label = "Mean")
+        ax.plot(mean.index, std, color = 'green', label = "Standard Deviation")
+        ax.set_xlabel("Time (Months)")
+        ax.set_ylabel('Total Generation (thousand MWh)')
+        ax.legend(fontsize=11)
+        ax.grid(True, alpha=0.3)
+        return fig
 
     else:
-        plt.figure(figsize=(14, 6))
-        plt.title(f"{time} Month Rolling Statistics")
-        plt.plot(mean.index, mean, label = "Mean")
-        plt.plot(mean.index, median, color= 'blue', label = "Median")
-        plt.plot(mean.index, std, color = 'green', label = "Standard Deviation")
-        plt.xlabel("Time (Months)")
-        plt.ylabel('Total Generation (thousand MWh)')
-        plt.legend(fontsize=11)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
+        ax.set_title(f"{time} Month Rolling Statistics")
+        ax.plot(mean.index, mean, label = "Mean")
+        ax.plot(mean.index, median, color= 'blue', label = "Median")
+        ax.plot(mean.index, std, color = 'green', label = "Standard Deviation")
+        ax.set_xlabel("Time (Months)")
+        ax.set_ylabel('Total Generation (thousand MWh)')
+        ax.legend(fontsize=11)
+        ax.grid(True, alpha=0.3)
+        return fig
 
 def make_lags(ts, lags):
     return pd.concat(
@@ -144,7 +148,102 @@ std_3 = total_lag.ewm(3).std()
 X_train, X_test, y_train, y_test = train_test_split(X_lag, total_lag, test_size=60, shuffle=False)
 
 # Fit and predict
-model = LinearRegression()  # `fit_intercept=True` since we didn't use DeterministicProcess
+model = LinearRegression() 
 model.fit(X_train, y_train)
 y_pred = pd.Series(model.predict(X_train), index=y_train.index)
 y_fore = pd.Series(model.predict(X_test), index=y_test.index)
+
+if options == 'Home':
+    st.title('Time Series Energy Analysis')
+    st.subheader("About This Project")
+    st.write("""
+    This dashboard analyzes monthly US electricity generation using time series forecasting techniques:
+    
+    - **Statistics**: Explore rolling averages and trends
+    - **Seasonal & Fourier Forecast**: Decomposition with Fourier terms (order=2)
+    - **Lag Model**: Autoregressive features with 12-month lags
+    
+    **Data Source**: U.S. Energy Information Administration (EIA)
+    """)
+
+if options == 'Statistics':
+    st.header("Rolling Statistics")
+
+    st.write("""
+    The rolling statistics that I included in this project are a good indicator of the periodic and seasonal nature of energy consumption 
+    in the US. The 12 month rolling statistics show a more linear curve that displays how average energy consumptions has changed from year to year.
+        """)
+
+    window_option = st.selectbox(
+        'Select Time Window',
+        options=['3-Month', '6-Month', '12-Month']
+    )
+
+    if window_option == '3-Month':
+        st.pyplot(plot_rolling_stats(mean_3, median_3, std_3, 3, emw=True))
+    elif window_option == '6-Month':
+        st.pyplot(plot_rolling_stats(mean_6, median_6, std_6, 6, emw=True))
+    elif window_option == '12-Month':
+        st.pyplot(plot_rolling_stats(mean_12, median_12, std_12, 12, emw=True))
+
+    st.subheader("Interpretation")
+    st.write("""
+        - **Mean**: Average generation over the rolling window
+        - **Standard Deviation**: Variability in generation
+        """)
+
+if options == 'Seasonal & Fourier Forecast':
+    st.header("Seasonal & Fourier Decomposition Forecast")
+
+    st.subheader("Method")
+
+    st.write("""
+        Energy consumption usually follows a seasonal pattern, with more demand occuring during the winter 
+        and summer months due to the need to heat and cool, respictivley.  Fourier features are a way capture these 
+        seasonality trends that occur in time series. To choose the order of fourier features to include in the decision process function,
+        I looked at a plot of the periodogram, which shows the variance against each season. 
+        """)
+    st.pyplot(plot_periodogram_monthly(total))
+
+    st.write("""
+        There are two large peaks around the annual (1) and semi-annual (2) time frames. Thus I choose my order to be 2 for the fourier features. With my fourier features added,
+        I ran the deterministic process with seasonality set set true and order equal to one. I then used a linear regression model to predict the total consumption based off the 
+        data from the determinisitic process. I also included a forecast of 12 months into the future. 
+        """)
+    
+    st.pyplot(plot_forecast_and_pred(total, total_pred, total_fore))
+
+if options == 'Lag Model':
+    st.header("Lag Model")
+
+    st.subheader("Method")
+
+    st.write("""
+        Using a lag model, I investigated whether there was any serial dependence in the energy data. Specifically I was investigating any cycles that
+        may be occuring in the data. Unlike seasonality, which occurs with respect to time, cycles can be indpendent of a time variable. Cycles occur with 
+        respect to what has happened in the recent past. That is why using a lag model helps interpert cyles. In a lag model data is shifted either forward or 
+        backward in time so that itself becomes a feature in the model and we can use it to predict the true value. To investigate how many lags to use in my model,
+        I plotted a lag plot, which shows the data plotted against the amount of lags, and a correlelagram, which shows the correlation of a lag that accounts for previous
+        lags.  
+    """)
+
+    st.pyplot(plot_lags(total, lags = 12, nrows=4))
+
+    st.write("""
+        From the lag plot we can see that there is a large amount of autocorrelation between lags 1, 11 and 12. Autocorellation measures linearity though,
+        and it is clear from the lag plots that a lot of the fits are non-linear. This is why its helpful to look at the plots themselves and not just at the 
+        autocorrelation.
+    """)
+
+    st.pyplot(plot_pacf(total, lags = 12))
+    st.write("""
+        The correlelogram shows that most of the lags fall out of the interval of no correlation (the blue shaded regtion). This is why I ended up choosing to include
+        12 lags. 
+    """)
+    st.write("""
+        With the amount of lags choosen, I moved ahead to devloping my lag model. With a lag model, we can only forecast into the future with the data we have available from the lags.
+        This is different from the fourier and seasonal forcasting because those models were a function of time and thus we could extend them as far as we wanted. Becuase the lag features
+        are a function of previous data (the lags) we can only forecast out to how many lags we incorportated. Instead of doing that though, I just used sci-kit learn to split the data up into training and testing data
+        and trained a linear regression model with the training data and forecasted with the testing data. The results are below.
+    """)
+    st.pyplot(plot_lag_forecast_and_pred(total_lag, y_pred, y_fore, y_test.index[0]))
