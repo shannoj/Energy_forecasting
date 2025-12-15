@@ -303,4 +303,4 @@ if options == 'Lag Model':
         I achieved a higher R^2 of 0.9436 for my test data. So overall, by deseasonalizing my data and applying a LAG model, I achieve a 4 percent increase in my R^2.
     """)
 
-    st.pyplot(plot_lag_forecast_and_pred(total_lag, y_pred_train, y_pred_test, y_test.index[0]))
+    st.pyplot(plot_lag_forecast_and_pred(y_lag_deseas, y_pred_train, y_pred_test, y_test.index[0]))
