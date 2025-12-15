@@ -128,8 +128,6 @@ fourier_r2 = r2_score(total, total_pred)
 fourier_rmse = np.sqrt(mean_squared_error(total, total_pred))
 fourier_mae = mean_absolute_error(total, total_pred)
 
-print(f"Fourier Model - R²: {fourier_r2:.4f}, RMSE: {fourier_rmse:,.2f}, MAE: {fourier_mae:,.2f}")
-
 X_fore = dp.out_of_sample(steps=12)
 
 total_fore = pd.Series(model.predict(X_fore), index=X_fore.index)
@@ -196,9 +194,6 @@ train_r2 = r2_score(y_train, y_pred)
 test_r2 = r2_score(y_test, y_fore)
 train_rmse = np.sqrt(mean_squared_error(y_train, y_pred))
 test_rmse = np.sqrt(mean_squared_error(y_test, y_fore))
-
-print(f"\nLag Model - Train R²: {train_r2:.4f}, Train RMSE: {train_rmse:,.2f}")
-print(f"Lag Model - Test R²: {test_r2:.4f}, Test RMSE: {test_rmse:,.2f}")
 
 if options == 'Home':
     st.title('Time Series Energy Analysis')
@@ -303,4 +298,4 @@ if options == 'Lag Model':
         I achieved a higher R^2 of 0.9436 for my test data. So overall, by deseasonalizing my data and applying a LAG model, I achieve a 4 percent increase in my R^2.
     """)
 
-    st.pyplot(plot_lag_forecast_and_pred(y_lag_deseas, y_pred_train, y_pred_test, y_test.index[0]))
+    st.pyplot(fig = plot_lag_forecast_and_pred(total, final_pred_train, final_pred_test, y_test.index[0]))
