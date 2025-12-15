@@ -122,11 +122,50 @@ total_pred = pd.Series(
     name='Fitted',
 )
 
+deseasonalized = total - (total_pred)
+
+fourier_r2 = r2_score(total, total_pred)
+fourier_rmse = np.sqrt(mean_squared_error(total, total_pred))
+fourier_mae = mean_absolute_error(total, total_pred)
+
+print(f"Fourier Model - R²: {fourier_r2:.4f}, RMSE: {fourier_rmse:,.2f}, MAE: {fourier_mae:,.2f}")
+
 X_fore = dp.out_of_sample(steps=12)
 
 total_fore = pd.Series(model.predict(X_fore), index=X_fore.index)
 
 X_lag = make_lags(total, lags=12)
+
+X_lag_deseas = make_lags(deseasonalized, lags=12).dropna()
+y_lag_deseas = deseasonalized.loc[X_lag_deseas.index]
+
+# Train/test split
+train_size_ses = len(X_lag_deseas) - 60
+X_train_ses = X_lag_deseas.iloc[:train_size_ses]
+X_test_ses = X_lag_deseas.iloc[train_size_ses:]
+y_train_ses = y_lag_deseas.iloc[:train_size_ses]
+y_test_ses = y_lag_deseas.iloc[train_size_ses:]
+
+# Fit on deseasonalized data
+model_lag_deseas = LinearRegression()
+model_lag_deseas.fit(X_train_ses, y_train_ses)
+
+# Predictions
+y_pred_train = pd.Series(model_lag_deseas.predict(X_train_ses), index = X_train_ses.index)
+y_pred_test = pd.Series(model_lag_deseas.predict(X_test_ses), index = X_test_ses.index)
+
+# Add seasonal component back
+seasonal_train = total_pred[y_train_ses.index]
+seasonal_test = total_pred[y_test_ses.index]
+
+final_pred_train = y_pred_train + seasonal_train
+final_pred_test = y_pred_test + seasonal_test
+
+train_r2 = r2_score(y_train_ses + seasonal_train, final_pred_train)
+test_r2 = r2_score(y_test_ses + seasonal_test, final_pred_test)
+
+print(test_r2)
+print(train_r2)
 
 X_lag = X_lag.fillna(0.0)
 
@@ -152,6 +191,14 @@ model = LinearRegression()
 model.fit(X_train, y_train)
 y_pred = pd.Series(model.predict(X_train), index=y_train.index)
 y_fore = pd.Series(model.predict(X_test), index=y_test.index)
+
+train_r2 = r2_score(y_train, y_pred)
+test_r2 = r2_score(y_test, y_fore)
+train_rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+test_rmse = np.sqrt(mean_squared_error(y_test, y_fore))
+
+print(f"\nLag Model - Train R²: {train_r2:.4f}, Train RMSE: {train_rmse:,.2f}")
+print(f"Lag Model - Test R²: {test_r2:.4f}, Test RMSE: {test_rmse:,.2f}")
 
 if options == 'Home':
     st.title('Time Series Energy Analysis')
@@ -208,7 +255,8 @@ if options == 'Seasonal & Fourier Forecast':
     st.write("""
         There are two large peaks around the annual (1) and semi-annual (2) time frames. Thus I choose my order to be 2 for the fourier features. With my fourier features added,
         I ran the deterministic process with seasonality set set true and order equal to one. I then used a linear regression model to predict the total consumption based off the 
-        data from the determinisitic process. I also included a forecast of 12 months into the future. 
+        data from the determinisitic process. I also included a forecast of 12 months into the future. Overall, my R^2 for the fourier seasonal model was .9092, which shows that seasonality
+        has a large predictive power for montlhy energy consumption.
         """)
     
     st.pyplot(plot_forecast_and_pred(total, total_pred, total_fore))
@@ -247,3 +295,12 @@ if options == 'Lag Model':
         and trained a linear regression model with the training data and forecasted with the testing data. The results are below.
     """)
     st.pyplot(plot_lag_forecast_and_pred(total_lag, y_pred, y_fore, y_test.index[0]))
+    
+    st.write("""
+        The problem with this lag model though is that before I fitted the model to the data, I did not deseasonalize the initial data. The result is that the performance of my lag model, with and R^2 of 0.6983 for the test data, is much lower than my fourier model, which
+        has an R^2 of .9092. Becuase I did not deseasonalize the data, the lags do not effectivley capture the non seasonal cycles since the predominant trend seen in the data is seasonal. To deseasonalize the data I subtracted the total predicted values of my fourier model from 
+        the actual values. This left me with a series of the residuals from the seasonal prediction which I could now use in my Lag model. With the new series I went ahead and created a lag model like I did before, and the result was that
+        I achieved a higher R^2 of 0.9436 for my test data. So overall, by deseasonalizing my data and applying a LAG model, I achieve a 4 percent increase in my R^2.
+    """)
+
+    st.pyplot(plot_lag_forecast_and_pred(total_lag, y_pred_train, y_pred_test, y_test.index[0]))
