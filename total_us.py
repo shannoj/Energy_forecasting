@@ -350,96 +350,96 @@ if options == 'Explore Different Data':
     forecast. 
     """)
 
-    window_option = st.selectbox(
-        'Select  Category',
-        options=['Total', "Coal",'Natural Gas','Nuclear','Hydroelectric','Wind','Solar']
+    category = st.selectbox(
+        'Select Category',
+        options=['Total', 'Coal', 'Natural Gas', 'Nuclear', 'Hydroelectric', 'Wind', 'Solar']
     )
 
-    if window_option == 'Total':
-
-        total = select_variable(df_renamed, 'Total')
-
-        if st.button('Show Periodogram'):
-            st.pyplot(plot_periodogram_monthly(total))
-        
-        fourier_order = st.number_input(
-                label='Enter Fourier Order',   
-                min_value=0,                   
-                max_value=100,                 
-                value=2,                      
-                step=1,                        
-                format='%d',                   
-                help='Order',
-                disabled=False                 
-        )
-
-        total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, fourier_order)
-
-        deasonalized = deseasonalize(total, total_pred)
-
-        lag_number = st.number_input(
-                label='Enter Lag Number',   
-                min_value=0,                   
-                max_value=100,                 
-                value=12,                      
-                step=1,                        
-                format='%d',                   
-                help='Lag',
-                disabled=False                 
-        )
-
-        if st.button('Show Lag Models'):
-            st.pyplot(plot_lags(total, lags = lag_number))
-
-        if st.button('Show PACF'):
-            st.pyplot(plot_pacf(total, lags = lag_number))
-
-        final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(total_pred, deasonalized, lag_number)
-
-        X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(total, lag_number)
-
-        st.pyplot(plot_lag_forecast_and_pred(total, y_pred, y_fore, y_test.index[0]))
-
-        st.pyplot(fig = plot_lag_forecast_and_pred(total, final_pred_train, final_pred_test, y_test.index[0]))
-
-        test_stats = st.number_input(
-                label='Enter Test Statistic Window',   
-                min_value=0,                   
-                max_value=100,                 
-                value=2,                      
-                step=1,                        
-                format='%d',                   
-                help='Monthly value window',
-                disabled=False                 
-        )
-
-        if st.button('Show Test Statistics'):
-            mean, median, std = make_test_statistics(total, test_stats)
-            st.pyplot(plot_rolling_stats(mean, median, std))
-
-    elif window_option == "Coal":
-
-        coal = select_variable(df_renamed, 'Coal')
-
-    elif window_option == "Natural Gas":
-
-        nat_gas = select_variable(df_renamed, 'Natural Gas')
+    variable = select_variable(df_renamed, category)
     
-    elif window_option == "Nuclear":
+    st.subheader(f"Analysis for: {category}")
 
-        nuclear = select_variable(df_renamed, 'Nuclear')
+    with st.expander("Periodogram Analysis"):
+        st.pyplot(plot_periodogram_monthly(variable))
+        st.caption("Use this to determine optimal Fourier order")
 
-    elif window_option == "Hydroelectric":
+    st.subheader("Fourier Seasonal Model")
+    
+    fourier_order = st.number_input(
+        'Fourier Order',
+        min_value=1,
+        max_value=10,
+        value=2,
+        step=1,
+        help='Number of sine/cosine pairs to capture seasonality'
+    )
 
-        hydroelectric = select_variable(df_renamed, 'Hydroelectric')
+    var_pred, X_fore, var_fore, f_r2, f_rmse, f_mae = fourier_seasonal(variable, fourier_order)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("R² Score", f"{f_r2:.4f}")
+    with col2:
+        st.metric("RMSE", f"{f_rmse:,.0f}")
+    with col3:
+        st.metric("MAE", f"{f_mae:,.0f}")
+    
+    st.pyplot(plot_forecast_and_pred(variable, var_pred, var_fore))
 
-    elif window_option == "Wind":
+    st.subheader("Lag Model Analysis")
+    
+    lag_number = st.number_input(
+        'Number of Lags',
+        min_value=1,
+        max_value=24,
+        value=12,
+        step=1,
+        help='Number of past months to use as features'
+    )
 
-        wind = select_variable(df_renamed, 'Wind')
+    tab1, tab2 = st.tabs(["Lag Plots", "PACF"])
+    
+    with tab1:
+        st.pyplot(plot_lags(variable, lags=lag_number, nrows=4))
+    
+    with tab2:
+        st.pyplot(plot_pacf(variable, lags=lag_number))
 
-    elif window_option == "Solar":
+    st.write("**Simple Lag Model (without deseasonalization)**")
+    X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(variable, lag_number)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Train R²", f"{train_r2:.4f}")
+    with col2:
+        st.metric("Test R²", f"{test_r2:.4f}")
+    
+    st.pyplot(plot_lag_forecast_and_pred(variable, y_pred, y_fore, y_test.index[0]))
 
-        solar = select_variable(df_renamed, 'Wind')
+    st.write("**Deseasonalized Lag Model**")
+    deseasonalized = deseasonalize(variable, var_pred)
+    final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(var_pred, deseasonalized, lag_number)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Train R²", f"{train_r2_des:.4f}")
+    with col2:
+        st.metric("Test R²", f"{test_r2_des:.4f}")
+    
+    st.pyplot(plot_lag_forecast_and_pred(variable, final_pred_train, final_pred_test, y_test.index[0]))
+
+    st.subheader("Rolling Statistics")
+    
+    test_stats = st.slider(
+        'Rolling Window Size (months)',
+        min_value=3,
+        max_value=24,
+        value=12,
+        step=1
+    )
+
+    mean, median, std = make_test_statistics(variable, test_stats)
+    st.pyplot(plot_rolling_stats(mean, median, std, test_stats, emw=True))  
 
 
 
