@@ -9,10 +9,6 @@ from statsmodels.graphics.tsaplots import plot_pacf
 from utils import seasonal_plot, plot_periodogram_monthly, plot_lags, lagplot
 import streamlit as st
 
-st.sidebar.title('Navigation')
-
-options = st.sidebar.radio('Pages', options=['Home', 'Statistics', 'Seasonal & Fourier Forecast', 'Lag Model', 'Explore Different Data'])
-
 def plot_forecast_and_pred(y, y_pred, y_fore):
     """Plot Fourier model forecast"""
     fig, ax = plt.subplots(figsize=(14, 6))
@@ -212,26 +208,13 @@ def make_test_statistics(variable, time):
 
     return mean, median, std
 
+st.sidebar.title('Navigation')
+
+options = st.sidebar.radio('Pages', options=['Home', 'Statistics', 'Seasonal & Fourier Forecast', 'Lag Model', 'Explore Different Data'])
 
 df = pd.read_csv('Net_generation_United_States_all_sectors_monthly.csv', header=4)
 
 df_renamed = cleaning(df)
-
-total = select_variable(df_renamed, 'Total')
-
-total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, 2)
-
-deasonalized = deseasonalize(total, total_pred)
-
-final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(total_pred, deasonalized, 12)
-
-X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(total, 12)
-
-mean_3, median_3, std_3 = make_test_statistics(total, 3)
-
-mean_6, median_6, std_6 = make_test_statistics(total, 6)
-
-mean_12, median_12, std_12 = make_test_statistics(total, 12)
 
 if options == 'Home':
     st.title('Time Series Energy Analysis')
@@ -247,6 +230,14 @@ if options == 'Home':
     """)
 
 if options == 'Statistics':
+
+    total = select_variable(df_renamed, 'Total')
+
+    mean_3, median_3, std_3 = make_test_statistics(total, 3)
+
+    mean_6, median_6, std_6 = make_test_statistics(total, 6)
+
+    mean_12, median_12, std_12 = make_test_statistics(total, 12)
     st.header("Rolling Statistics")
 
     st.write("""
@@ -273,6 +264,11 @@ if options == 'Statistics':
         """)
 
 if options == 'Seasonal & Fourier Forecast':
+
+    total = select_variable(df_renamed, 'Total')
+
+    total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, 2)
+
     st.header("Seasonal & Fourier Decomposition Forecast")
 
     st.subheader("Method")
@@ -295,6 +291,17 @@ if options == 'Seasonal & Fourier Forecast':
     st.pyplot(plot_forecast_and_pred(total, total_pred, total_fore))
 
 if options == 'Lag Model':
+
+    total = select_variable(df_renamed, 'Total')
+
+    total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, 2)
+
+    deasonalized = deseasonalize(total, total_pred)
+
+    final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(total_pred, deasonalized, 12)
+
+    X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(total, 12)
+
     st.header("Lag Model")
 
     st.subheader("Method")
