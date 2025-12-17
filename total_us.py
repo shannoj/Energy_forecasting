@@ -378,7 +378,8 @@ if options == 'Explore Different Data':
         max_value=10,
         value=2,
         step=1,
-        help='Number of sine/cosine pairs to capture seasonality'
+        help='Number of sine/cosine pairs to capture seasonality',
+        key='fourier_order_input'
     )
 
     var_pred, X_fore, var_fore, f_r2, f_rmse, f_mae = fourier_seasonal(variable, fourier_order)
@@ -391,7 +392,8 @@ if options == 'Explore Different Data':
     with col3:
         st.metric("MAE", f"{f_mae:,.0f}")
     
-    st.pyplot(plot_forecast_and_pred(variable, var_pred, var_fore))
+    fig = plot_forecast_and_pred(variable, var_pred, var_fore)
+    st.pyplot(fig, clear_figure=True) 
 
     st.subheader("Lag Model Analysis")
     
