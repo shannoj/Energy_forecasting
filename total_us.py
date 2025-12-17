@@ -11,7 +11,7 @@ import streamlit as st
 
 st.sidebar.title('Navigation')
 
-options = st.sidebar.radio('Pages', options=['Home', 'Statistics', 'Seasonal & Fourier Forecast', 'Lag Model'])
+options = st.sidebar.radio('Pages', options=['Home', 'Statistics', 'Seasonal & Fourier Forecast', 'Lag Model', 'Explore Different Data'])
 
 def plot_forecast_and_pred(y, y_pred, y_fore):
     """Plot Fourier model forecast"""
@@ -82,118 +82,156 @@ def make_lags(ts, lags):
         },
         axis=1)
 
+def cleaning(df):
+    df['Month'] = pd.to_datetime(df['Month'], format='%b %Y')
+
+    df_renamed = df.rename(columns={'all fuels (utility-scale) thousand megawatthours': 'Total', 
+                                    'coal thousand megawatthours': "Coal",
+                                    'natural gas thousand megawatthours': 'Natural Gas',
+                                    'nuclear thousand megawatthours':'Nuclear',
+                                    'conventional hydroelectric thousand megawatthours': 'Hydroelectric',
+                                    'wind thousand megawatthours':'Wind',
+                                    'all solar thousand megawatthours':'Solar',
+                                    })
+
+    columns = df_renamed.columns.to_list()
+
+    for i in columns:
+        if i != 'Month':
+            df_renamed[i] = pd.to_numeric(df_renamed[i])
+    
+    df_renamed = df_renamed.set_index('Month')
+
+    return df_renamed
+
+def select_variable(df, column):
+
+    variable = df[column]
+
+    variable = variable.dropna()
+
+    variable = variable.asfreq("MS")
+
+    return variable
+
+def fourier_seasonal(variable, order):
+
+    fourier = CalendarFourier(freq="MS", order = order)
+
+    dp = DeterministicProcess(
+        index=variable.index,
+        constant=True,
+        order=1,
+        seasonal = True,
+        additional_terms = [fourier],
+        drop=True,
+    )
+
+    X = dp.in_sample()
+
+    model = LinearRegression().fit(X, variable)
+
+    variable_pred = pd.Series(
+        model.predict(X),
+        index=X.index,
+        name='Fitted',
+    )
+
+    X_fore = dp.out_of_sample(steps=12)
+
+    total_fore = pd.Series(model.predict(X_fore), index=X_fore.index)
+
+    fourier_r2 = r2_score(variable, variable_pred)
+    fourier_rmse = np.sqrt(mean_squared_error(variable, variable_pred))
+    fourier_mae = mean_absolute_error(variable, variable_pred)
+
+    return variable_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae
+
+def deseasonalize(variable, variable_pred):
+
+    return (variable - variable_pred)
+
+def make_deasonal_lag_model(variable_pred, deseasonalized, lags):
+
+    X_lag_deseas = make_lags(deseasonalized, lags=lags).dropna()
+
+    y_lag_deseas = deseasonalized.loc[X_lag_deseas.index]
+
+    train_size_ses = len(X_lag_deseas) - 60
+    X_train_ses = X_lag_deseas.iloc[:train_size_ses]
+    X_test_ses = X_lag_deseas.iloc[train_size_ses:]
+    y_train_ses = y_lag_deseas.iloc[:train_size_ses]
+    y_test_ses = y_lag_deseas.iloc[train_size_ses:]
+
+    model_lag_deseas = LinearRegression()
+    model_lag_deseas.fit(X_train_ses, y_train_ses)
+
+    y_pred_train = pd.Series(model_lag_deseas.predict(X_train_ses), index = X_train_ses.index)
+    y_pred_test = pd.Series(model_lag_deseas.predict(X_test_ses), index = X_test_ses.index)
+
+    seasonal_train = variable_pred[y_train_ses.index]
+    seasonal_test = variable_pred[y_test_ses.index]
+
+    final_pred_train = y_pred_train + seasonal_train
+    final_pred_test = y_pred_test + seasonal_test
+
+    train_r2 = r2_score(y_train_ses + seasonal_train, final_pred_train)
+    test_r2 = r2_score(y_test_ses + seasonal_test, final_pred_test)
+    train_rmse = np.sqrt(mean_squared_error(y_train_ses + seasonal_train, final_pred_train))
+    test_rmse = np.sqrt(mean_squared_error(y_test_ses + seasonal_test, final_pred_test))
+
+    return final_pred_train, final_pred_test, train_r2, test_r2, train_rmse, test_rmse
+
+def make_lag_model(variable, lags):
+
+    X_lag = make_lags(variable, lags=lags)
+    
+    X_lag = X_lag.fillna(0.0)
+
+    variable_lag = variable.copy()
+
+    X_train, X_test, y_train, y_test = train_test_split(X_lag, variable_lag, test_size=60, shuffle=False)
+
+    model = LinearRegression() 
+    model.fit(X_train, y_train)
+    y_pred = pd.Series(model.predict(X_train), index=y_train.index)
+    y_fore = pd.Series(model.predict(X_test), index=y_test.index)
+
+    train_r2 = r2_score(y_train, y_pred)
+    test_r2 = r2_score(y_test, y_fore)
+    train_rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    test_rmse = np.sqrt(mean_squared_error(y_test, y_fore))
+
+    return X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse
+
+def make_test_statistics(variable, time):
+
+    mean = variable.ewm(time).mean()
+    median = variable.rolling(time).median()
+    std = variable.ewm(time).std()
+
+    return mean, median, std
+
+
 df = pd.read_csv('Net_generation_United_States_all_sectors_monthly.csv', header=4)
 
-df['Month'] = pd.to_datetime(df['Month'], format='%b %Y')
+df_renamed = cleaning(df)
 
-df_renamed = df.rename(columns={'all fuels (utility-scale) thousand megawatthours': 'Total'})
+total = select_variable(df_renamed, 'Total')
 
-columns = df_renamed.columns.to_list()
+total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, 2)
 
-df_renamed['Total'] = pd.to_numeric(df_renamed['Total'])
+deasonalized = deseasonalize(total, total_pred)
 
-# Set Month as the index to create a DatetimeIndex
-df_renamed = df_renamed.set_index('Month')
+final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(total_pred, deasonalized, 12)
 
-total = df_renamed['Total']
+X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(total, 12)
 
-total = total.asfreq('MS')
+mean_3, median_3, std_3 = make_test_statistics(total, 3)
 
-total = total.dropna()
+mean_6, median_6, std_6 = make_test_statistics(total, 6)
 
-fourier = CalendarFourier(freq="MS", order = 2)
-
-dp = DeterministicProcess(
-    index=total.index,
-    constant=True,
-    order=1,
-    seasonal = True,
-    additional_terms = [fourier],
-    drop=True,
-)
-
-X = dp.in_sample()
-
-model = LinearRegression().fit(X, total)
-
-total_pred = pd.Series(
-    model.predict(X),
-    index=X.index,
-    name='Fitted',
-)
-
-deseasonalized = total - (total_pred)
-
-fourier_r2 = r2_score(total, total_pred)
-fourier_rmse = np.sqrt(mean_squared_error(total, total_pred))
-fourier_mae = mean_absolute_error(total, total_pred)
-
-X_fore = dp.out_of_sample(steps=12)
-
-total_fore = pd.Series(model.predict(X_fore), index=X_fore.index)
-
-X_lag = make_lags(total, lags=12)
-
-X_lag_deseas = make_lags(deseasonalized, lags=12).dropna()
-y_lag_deseas = deseasonalized.loc[X_lag_deseas.index]
-
-# Train/test split
-train_size_ses = len(X_lag_deseas) - 60
-X_train_ses = X_lag_deseas.iloc[:train_size_ses]
-X_test_ses = X_lag_deseas.iloc[train_size_ses:]
-y_train_ses = y_lag_deseas.iloc[:train_size_ses]
-y_test_ses = y_lag_deseas.iloc[train_size_ses:]
-
-# Fit on deseasonalized data
-model_lag_deseas = LinearRegression()
-model_lag_deseas.fit(X_train_ses, y_train_ses)
-
-# Predictions
-y_pred_train = pd.Series(model_lag_deseas.predict(X_train_ses), index = X_train_ses.index)
-y_pred_test = pd.Series(model_lag_deseas.predict(X_test_ses), index = X_test_ses.index)
-
-# Add seasonal component back
-seasonal_train = total_pred[y_train_ses.index]
-seasonal_test = total_pred[y_test_ses.index]
-
-final_pred_train = y_pred_train + seasonal_train
-final_pred_test = y_pred_test + seasonal_test
-
-train_r2 = r2_score(y_train_ses + seasonal_train, final_pred_train)
-test_r2 = r2_score(y_test_ses + seasonal_test, final_pred_test)
-
-print(test_r2)
-print(train_r2)
-
-X_lag = X_lag.fillna(0.0)
-
-# Create target series and data splits
-total_lag = total.copy()
-
-mean_12 = total_lag.rolling(12).mean()
-median_12 = total_lag.rolling(12).median()
-std_12 = total_lag.rolling(12).std()
-
-mean_6 = total_lag.rolling(6).mean()
-median_6 = total_lag.rolling(6).median()
-std_6 = total_lag.rolling(6).std()
-
-mean_3 = total_lag.ewm(3).mean()
-median_3 = total_lag.rolling(3).median()
-std_3 = total_lag.ewm(3).std()
-
-X_train, X_test, y_train, y_test = train_test_split(X_lag, total_lag, test_size=60, shuffle=False)
-
-# Fit and predict
-model = LinearRegression() 
-model.fit(X_train, y_train)
-y_pred = pd.Series(model.predict(X_train), index=y_train.index)
-y_fore = pd.Series(model.predict(X_test), index=y_test.index)
-
-train_r2 = r2_score(y_train, y_pred)
-test_r2 = r2_score(y_test, y_fore)
-train_rmse = np.sqrt(mean_squared_error(y_train, y_pred))
-test_rmse = np.sqrt(mean_squared_error(y_test, y_fore))
+mean_12, median_12, std_12 = make_test_statistics(total, 12)
 
 if options == 'Home':
     st.title('Time Series Energy Analysis')
@@ -289,7 +327,7 @@ if options == 'Lag Model':
         are a function of previous data (the lags) we can only forecast out to how many lags we incorportated. Instead of doing that though, I just used sci-kit learn to split the data up into training and testing data
         and trained a linear regression model with the training data and forecasted with the testing data. The results are below.
     """)
-    st.pyplot(plot_lag_forecast_and_pred(total_lag, y_pred, y_fore, y_test.index[0]))
+    st.pyplot(plot_lag_forecast_and_pred(total, y_pred, y_fore, y_test.index[0]))
     
     st.write("""
         The problem with this lag model though is that before I fitted the model to the data, I did not deseasonalize the initial data. The result is that the performance of my lag model, with and R^2 of 0.6983 for the test data, is much lower than my fourier model, which
@@ -299,3 +337,113 @@ if options == 'Lag Model':
     """)
 
     st.pyplot(fig = plot_lag_forecast_and_pred(total, final_pred_train, final_pred_test, y_test.index[0]))
+
+if options == 'Explore Different Data':
+
+    st.header("Explore")
+
+    st.subheader("Instructions")
+
+    st.write("""
+    The EIA dataset contains more categories than just total energy consumption. In this section I wanted to include a more interactive version of the models I demonstrated from previous setions
+    So the point of this section is to be able to choose your own categoray and explore different lags, fourier orders, and test statistics to see how it effects the time series and its
+    forecast. 
+    """)
+
+    window_option = st.selectbox(
+        'Select  Category',
+        options=['Total', "Coal",'Natural Gas','Nuclear','Hydroelectric','Wind','Solar']
+    )
+
+    if window_option == 'Total':
+
+        total = select_variable(df_renamed, 'Total')
+
+        if st.button('Show Periodogram'):
+            st.pyplot(plot_periodogram_monthly(total))
+        
+        fourier_order = st.number_input(
+                label='Enter Fourier Order',   
+                min_value=0,                   
+                max_value=100,                 
+                value=2,                      
+                step=1,                        
+                format='%d',                   
+                help='Order',
+                disabled=False                 
+        )
+
+        total_pred, X_fore, total_fore, fourier_r2, fourier_rmse, fourier_mae = fourier_seasonal(total, fourier_order)
+
+        deasonalized = deseasonalize(total, total_pred)
+
+        lag_number = st.number_input(
+                label='Enter Lag Number',   
+                min_value=0,                   
+                max_value=100,                 
+                value=12,                      
+                step=1,                        
+                format='%d',                   
+                help='Lag',
+                disabled=False                 
+        )
+
+        if st.button('Show Lag Models'):
+            st.pyplot(plot_lags(total, lags = lag_number))
+
+        if st.button('Show PACF'):
+            st.pyplot(plot_pacf(total, lags = lag_number))
+
+        final_pred_train, final_pred_test, train_r2_des, test_r2_des, train_rmse_des, test_rmse_des = make_deasonal_lag_model(total_pred, deasonalized, lag_number)
+
+        X_train, X_test, y_train, y_test, y_pred, y_fore, train_r2, test_r2, train_rmse, test_rmse = make_lag_model(total, lag_number)
+
+        st.pyplot(plot_lag_forecast_and_pred(total, y_pred, y_fore, y_test.index[0]))
+
+        st.pyplot(fig = plot_lag_forecast_and_pred(total, final_pred_train, final_pred_test, y_test.index[0]))
+
+        test_stats = st.number_input(
+                label='Enter Test Statistic Window',   
+                min_value=0,                   
+                max_value=100,                 
+                value=2,                      
+                step=1,                        
+                format='%d',                   
+                help='Monthly value window',
+                disabled=False                 
+        )
+
+        if st.button('Show Test Statistics'):
+            mean, median, std = make_test_statistics(total, test_stats)
+            st.pyplot(plot_rolling_stats(mean, median, std))
+
+    elif window_option == "Coal":
+
+        coal = select_variable(df_renamed, 'Coal')
+
+    elif window_option == "Natural Gas":
+
+        nat_gas = select_variable(df_renamed, 'Natural Gas')
+    
+    elif window_option == "Nuclear":
+
+        nuclear = select_variable(df_renamed, 'Nuclear')
+
+    elif window_option == "Hydroelectric":
+
+        hydroelectric = select_variable(df_renamed, 'Hydroelectric')
+
+    elif window_option == "Wind":
+
+        wind = select_variable(df_renamed, 'Wind')
+
+    elif window_option == "Solar":
+
+        solar = select_variable(df_renamed, 'Wind')
+
+
+
+
+
+
+
